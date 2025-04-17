@@ -45,3 +45,7 @@ L'application utilise l'API OpenWeatherMap. Une clé API est déjà incluse dans
 ## Crédits
 
 - Données météorologiques fournies par [OpenWeatherMap](https://openweathermap.org/)
+
+## Live 
+
+- try the app [live](https://mevue.vercel.app/)
