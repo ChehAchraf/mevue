@@ -1,17 +1,68 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
+import axios from 'axios';
 
 const emit = defineEmits(['search', 'geolocation']);
 const searchQuery = ref('');
 const geoLoading = ref(false);
 const geoError = ref(null);
+const suggestions = ref([]);
+const isLoading = ref(false);
 
 const handleSubmit = (e) => {
   e.preventDefault();
   if (searchQuery.value.trim()) {
     emit('search', searchQuery.value.trim());
+    suggestions.value = [];
   }
 };
+
+const fetchSuggestions = async (query) => {
+  if (query.length < 2) {
+    suggestions.value = [];
+    return;
+  }
+  
+  isLoading.value = true;
+  try {
+    // Using OpenWeatherMap Geo API to get city suggestions
+    const response = await axios.get(
+      `https://api.openweathermap.org/geo/1.0/direct?q=${query}&limit=5&appid=1635890035cbba097fd5c26c8ea672a1`
+    );
+    
+    suggestions.value = response.data.map(city => ({
+      name: city.name,
+      country: city.country,
+      state: city.state,
+      lat: city.lat,
+      lon: city.lon
+    }));
+  } catch (error) {
+    console.error('Error fetching city suggestions:', error);
+    suggestions.value = [];
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+const selectSuggestion = (suggestion) => {
+  searchQuery.value = suggestion.name;
+  emit('geolocation', { lat: suggestion.lat, lon: suggestion.lon });
+  suggestions.value = [];
+};
+
+// Debounce function to limit API calls while typing
+let debounceTimeout;
+watch(searchQuery, (newValue) => {
+  clearTimeout(debounceTimeout);
+  debounceTimeout = setTimeout(() => {
+    if (newValue.trim()) {
+      fetchSuggestions(newValue.trim());
+    } else {
+      suggestions.value = [];
+    }
+  }, 300);
+});
 
 const handleGeolocation = () => {
   if (!navigator.geolocation) {
@@ -52,19 +103,40 @@ const handleGeolocation = () => {
 
 <template>
   <div class="search-wrapper">
-    <form @submit="handleSubmit" class="search-form">
-      <div class="search-container">
-        <input
-          type="text"
-          v-model="searchQuery"
-          placeholder="Rechercher une ville..."
-          class="search-input"
-        />
-        <button type="submit" class="search-button">
-          <span class="search-icon">🔍</span>
-        </button>
+    <div class="search-container-wrapper">
+      <form @submit="handleSubmit" class="search-form">
+        <div class="search-container">
+          <input
+            type="text"
+            v-model="searchQuery"
+            placeholder="Rechercher une ville..."
+            class="search-input"
+            autocomplete="off"
+          />
+          <button type="submit" class="search-button">
+            <span class="search-icon">🔍</span>
+          </button>
+        </div>
+      </form>
+      
+      <div class="suggestions-container" v-if="suggestions.length > 0">
+        <ul class="suggestions-list">
+          <li 
+            v-for="(suggestion, index) in suggestions" 
+            :key="index" 
+            @click="selectSuggestion(suggestion)"
+            class="suggestion-item"
+          >
+            <span class="suggestion-name">{{ suggestion.name }}</span>
+            <span class="suggestion-details">
+              {{ suggestion.state ? suggestion.state + ', ' : '' }}{{ suggestion.country }}
+            </span>
+          </li>
+        </ul>
       </div>
-    </form>
+      
+      <div v-if="isLoading" class="suggestion-loading">Recherche de villes...</div>
+    </div>
     
     <div class="geo-container">
       <button @click="handleGeolocation" class="geo-button" :disabled="geoLoading">
@@ -86,9 +158,14 @@ const handleGeolocation = () => {
   width: 100%;
 }
 
-.search-form {
+.search-container-wrapper {
+  position: relative;
   width: 100%;
   max-width: 500px;
+}
+
+.search-form {
+  width: 100%;
 }
 
 .search-container {
@@ -136,6 +213,66 @@ const handleGeolocation = () => {
 
 .search-icon {
   font-size: 1.2rem;
+}
+
+.suggestions-container {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 5px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 10;
+}
+
+.suggestions-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.suggestion-item {
+  padding: 12px 20px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background 0.2s ease;
+}
+
+.suggestion-item:hover {
+  background-color: rgba(110, 142, 251, 0.1);
+}
+
+.suggestion-item:not(:last-child) {
+  border-bottom: 1px solid #eee;
+}
+
+.suggestion-name {
+  font-weight: 500;
+}
+
+.suggestion-details {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.suggestion-loading {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 5px;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+  padding: 10px;
+  text-align: center;
+  color: #666;
+  font-size: 0.9rem;
 }
 
 .geo-container {
